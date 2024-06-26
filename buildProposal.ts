@@ -1,7 +1,6 @@
 import { Provider } from "@ethersproject/providers";
 import { CoreGovProposal, NonEmergencySCProposal } from "./coreGovProposalInterface";
-import { ArbSys__factory, UpgradeExecRouteBuilder__factory } from "../../typechain-types";
-import { BigNumberish, BytesLike } from "ethers";
+import { BigNumberish, BytesLike, Contract } from "ethers";
 import { ARB_SYS_ADDRESS } from "@arbitrum/sdk/dist/lib/dataEntities/constants";
 import { keccak256 } from "ethers/lib/utils";
 import { defaultAbiCoder } from "@ethersproject/abi";
@@ -22,7 +21,14 @@ async function _getCallDataFromRouteBuilder(
   predecessor: BytesLike | undefined
 ) {
   const timelockSalt = _generateL1TimelockSalt(actionChainIds, actionAddresses);
-  const routeBuilder = UpgradeExecRouteBuilder__factory.connect(routeBuilderAddress, provider);
+  const routeBuilder = new Contract(
+    routeBuilderAddress,
+    [
+      "function createActionRouteData(uint[],address[],uint[],bytes[],bytes32,bytes32) external view returns (address,bytes)",
+      "function createActionRouteDataWithDefaults(uint[],address[],bytes32) external view returns (address,bytes)",
+    ],
+    provider
+  );
   if (actionValues && actionDatas && predecessor) {
     return (
       await routeBuilder.createActionRouteData(
@@ -71,7 +77,11 @@ async function _buildProposal(
   // The route builder encodes the sendTxToL1 call in the calldata it returns.
   // Proposal submission on the governor has this value passed in as a separate parameter;
   // so here we decode to retrieve the appropriate calldata.
-  const decoded = ArbSys__factory.createInterface().decodeFunctionData("sendTxToL1", calldata);
+  const arbSys = new Contract(ARB_SYS_ADDRESS, [
+    "function sendTxToL1(address,bytes) external payable returns (uint)",
+  ]);
+
+  const decoded = arbSys.interface.decodeFunctionData("sendTxToL1", calldata);
 
   return {
     actionChainIds,
